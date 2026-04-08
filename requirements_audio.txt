@@ -1,0 +1,45 @@
+# ============================================================
+# requirements_audio.txt  —  PC 2 (Audio Model Training)
+# Install with:
+#   pip install -r requirements_audio.txt
+# ============================================================
+
+# ── Core Deep Learning ──────────────────────────────────────
+torch==2.3.0
+torchaudio==2.3.0
+
+# ── HuggingFace Ecosystem ───────────────────────────────────
+transformers==4.40.0
+accelerate==0.29.3
+datasets==2.19.0
+huggingface_hub==0.23.0
+tokenizers==0.19.1
+
+# ── Audio Processing ────────────────────────────────────────
+librosa==0.10.2
+soundfile==0.12.1
+audioread==3.0.1
+resampy==0.4.3
+pooch==1.8.1
+
+# ── Scientific Computing ────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.0
+scikit-learn==1.4.2
+
+# ── Visualisation ───────────────────────────────────────────
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# ── Dataset Downloads ───────────────────────────────────────
+gdown==5.1.0
+requests==2.31.0
+tqdm==4.66.2
+
+# ── Video / Audio Conversion ────────────────────────────────
+ffmpeg-python==0.2.0
+
+# ── Utilities ───────────────────────────────────────────────
+PyYAML==6.0.1
+filelock==3.13.4
+packaging==24.0

@@ -1,0 +1,56 @@
+# ============================================================
+# requirements.txt  —  Combined (Both PCs / Colab)
+# Install with:
+#   pip install -r requirements.txt
+#
+# NOTE: Install PyTorch FIRST with CUDA before running this:
+#   pip install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 \
+#       --index-url https://download.pytorch.org/whl/cu121
+# ============================================================
+
+# ── Core Deep Learning ──────────────────────────────────────
+torch==2.3.0
+torchvision==0.18.0
+torchaudio==2.3.0
+
+# ── HuggingFace Ecosystem ───────────────────────────────────
+transformers==4.40.0
+accelerate==0.29.3
+datasets==2.19.0
+huggingface_hub==0.23.0
+tokenizers==0.19.1
+
+# ── Computer Vision ─────────────────────────────────────────
+opencv-python==4.9.0.80
+Pillow==10.3.0
+albumentations==1.4.3
+timm==0.9.16
+imageio==2.34.1
+
+# ── Audio Processing ────────────────────────────────────────
+librosa==0.10.2
+soundfile==0.12.1
+audioread==3.0.1
+resampy==0.4.3
+pooch==1.8.1
+ffmpeg-python==0.2.0
+
+# ── Scientific Computing ────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.0
+scikit-learn==1.4.2
+
+# ── Visualisation ───────────────────────────────────────────
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# ── Dataset Downloads ───────────────────────────────────────
+gdown==5.1.0
+kaggle==1.6.11
+requests==2.31.0
+tqdm==4.66.2
+
+# ── Utilities ───────────────────────────────────────────────
+PyYAML==6.0.1
+filelock==3.13.4
+packaging==24.0
