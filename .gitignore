@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# ML / Training artifacts (large files — store on Drive/HDD not GitHub)
+*.pt
+*.pth
+*.bin
+*.safetensors
+models/
+checkpoints/
+logs/*.png
+logs/*.json
+
+# Datasets (never commit raw data)
+datasets/
+*.zip
+*.tar.gz
+*.flac
+*.wav
+*.mp3
+*.mp4
+*.avi
+
+# Kaggle credentials
+kaggle.json
+.kaggle/
+
+# HuggingFace tokens
+.env
+*.env
+hf_token.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp files
+tmp/
+*.tmp
+*.log
