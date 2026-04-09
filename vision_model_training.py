@@ -4,6 +4,15 @@
 # ║  Platform : Google Colab T4/A100 GPU                                     ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
+import torch, subprocess, sys, os, json, math, time, copy, random, shutil
+import urllib.request, zipfile, hashlib
+from pathlib import Path
+import gdown
+import numpy as np
+from PIL import Image
+from tqdm import tqdm as _tqdm
+from collections import defaultdict
+
 def setup_colab_env():
     """Verify GPU, install dependencies and mount Drive."""
     print("🔬 Verifying environment...")
@@ -27,27 +36,6 @@ def setup_colab_env():
     for d in [CHECKPOINT_DIR, BEST_MODEL_DIR, LOG_DIR]:
         os.makedirs(d, exist_ok=True)
     print(f"✅ Setup complete. Drive: {DRIVE_BASE}")
-
-
-# ── CELL 4 : Multi-Dataset Download & Organisation ───────────────────────────
-"""## 📥 All Datasets Download
-Supports 6 datasets with graceful fallback for each:
-  1. Celeb-DF v2          — auto via gdown
-  2. FaceForensics++ c23  — requires signed agreement script
-  3. DFDC                 — requires Kaggle API credentials
-  4. DFD (Google)         — via FF++ download script
-  5. WildDeepfake         — auto via gdown
-  6. ForgeryNet           — manual upload or gdown
-
-All datasets are unified into:
-  /dataset/train/real/  &  /dataset/train/fake/
-  /dataset/val/real/    &  /dataset/val/fake/
-"""
-import gdown
-import numpy as np
-from PIL import Image
-from tqdm import tqdm as _tqdm
-from collections import defaultdict
 
 DATASET_ROOT = Path("/dataset")
 VAL_RATIO    = 0.15
