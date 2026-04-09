@@ -22,7 +22,8 @@ def setup_colab_env():
     print(f"GPU  : {torch.cuda.get_device_name(0)}")
     print(f"VRAM : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
     
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q",
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--upgrade",
+        "numpy<2",  # Critical fix for OpenCV compatibility
         "transformers==4.40.0", "accelerate==0.29.3",
         "grad-cam==1.5.0", "opencv-python-headless==4.9.0.80",
         "Pillow==10.3.0", "scikit-learn==1.4.2", "matplotlib==3.8.4",
