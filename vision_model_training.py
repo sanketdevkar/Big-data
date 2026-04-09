@@ -4,47 +4,29 @@
 # ║  Platform : Google Colab T4/A100 GPU                                     ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-# ── CELL 1 : GPU Check ───────────────────────────────────────────────────────
-"""## 🖥️ GPU Verification"""
-import torch, subprocess, sys, os, json, math, time, copy, random, shutil
-import urllib.request, zipfile, hashlib
-from pathlib import Path
+def setup_colab_env():
+    """Verify GPU, install dependencies and mount Drive."""
+    print("🔬 Verifying environment...")
+    if not torch.cuda.is_available():
+        raise RuntimeError("No GPU. Runtime → Change Runtime Type → GPU (T4/A100)")
 
-if not torch.cuda.is_available():
-    raise RuntimeError("No GPU. Runtime → Change Runtime Type → GPU (T4/A100)")
-
-print(f"GPU  : {torch.cuda.get_device_name(0)}")
-print(f"VRAM : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
-print(f"CUDA : {torch.version.cuda}")
-IS_A100 = torch.cuda.get_device_properties(0).total_memory > 30e9
-print(f"Mode : {'A100 — full batch' if IS_A100 else 'T4 — grad_accum mode'}")
-
-
-# ── CELL 2 : Install Dependencies ────────────────────────────────────────────
-"""## 📦 Install Dependencies"""
-subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-    "transformers==4.40.0", "accelerate==0.29.3",
-    "grad-cam==1.5.0", "opencv-python-headless==4.9.0.80",
-    "Pillow==10.3.0", "scikit-learn==1.4.2", "matplotlib==3.8.4",
-    "seaborn==0.13.2", "tqdm==4.66.2", "huggingface_hub==0.23.0",
-    "gdown==5.1.0", "kaggle==1.6.11", "timm==0.9.16",
-    "albumentations==1.4.3",
-], check=True)
-print("✅ All dependencies installed")
-
-
-# ── CELL 3 : Mount Drive & Paths ─────────────────────────────────────────────
-"""## 💾 Mount Google Drive"""
-from google.colab import drive
-drive.mount('/content/drive')
-
-DRIVE_BASE     = '/content/drive/MyDrive/deepfake_models/vision'
-CHECKPOINT_DIR = f'{DRIVE_BASE}/checkpoints'
-BEST_MODEL_DIR = f'{DRIVE_BASE}/best_model'
-LOG_DIR        = f'{DRIVE_BASE}/logs'
-for d in [CHECKPOINT_DIR, BEST_MODEL_DIR, LOG_DIR]:
-    os.makedirs(d, exist_ok=True)
-print(f"✅ Drive mounted → {DRIVE_BASE}")
+    print(f"GPU  : {torch.cuda.get_device_name(0)}")
+    print(f"VRAM : {torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB")
+    
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q",
+        "transformers==4.40.0", "accelerate==0.29.3",
+        "grad-cam==1.5.0", "opencv-python-headless==4.9.0.80",
+        "Pillow==10.3.0", "scikit-learn==1.4.2", "matplotlib==3.8.4",
+        "seaborn==0.13.2", "tqdm==4.66.2", "huggingface_hub==0.23.0",
+        "gdown==5.1.0", "kaggle==1.6.11", "timm==0.9.16",
+        "albumentations==1.4.3",
+    ], check=True)
+    
+    from google.colab import drive
+    drive.mount('/content/drive')
+    for d in [CHECKPOINT_DIR, BEST_MODEL_DIR, LOG_DIR]:
+        os.makedirs(d, exist_ok=True)
+    print(f"✅ Setup complete. Drive: {DRIVE_BASE}")
 
 
 # ── CELL 4 : Multi-Dataset Download & Organisation ───────────────────────────
@@ -267,43 +249,66 @@ def download_forgerynet():
             copy_to_dataset(f, label, "forgerynet")
     print("  ✅ ForgeryNet done")
 
-# ── Run all downloaders ───────────────────────────────────────────────────────
-print("\n═══ Starting multi-dataset download ═══")
-download_celebdf()
-download_faceforensics()
-download_dfdc()
-download_wild_deepfake()
-download_dfd()
-download_forgerynet()
+def download_all_datasets():
+    """Download all datasets if they don't exist, skip on failure."""
+    print("\n═══ Starting multi-dataset download ═══")
+    try:
+        download_celebdf()
+    except Exception as e:
+        print(f"  ⚠️ Celeb-DF download failed: {e}")
+        
+    try:
+        download_faceforensics()
+    except Exception as e:
+        print(f"  ⚠️ FaceForensics++ download failed: {e}")
+        
+    try:
+        download_dfdc()
+    except Exception as e:
+        print(f"  ⚠️ DFDC download failed: {e}")
+        
+    try:
+        download_wild_deepfake()
+    except Exception as e:
+        print(f"  ⚠️ WildDeepfake download failed: {e}")
+        
+    try:
+        download_dfd()
+    except Exception as e:
+        print(f"  ⚠️ DFD download failed: {e}")
+        
+    try:
+        download_forgerynet()
+    except Exception as e:
+        print(f"  ⚠️ ForgeryNet download failed: {e}")
 
-# Synthetic fallback if nothing downloaded
-total_imgs = sum(len(list((DATASET_ROOT/sp/lb).glob("*")))
-                 for sp in ["train","val"] for lb in ["real","fake"])
-if total_imgs < 100:
-    print("\n⚠️  No real data found — generating synthetic dataset for pipeline testing …")
+def get_dataset_summary():
+    """Print the current dataset distribution."""
+    total_imgs = sum(len(list((DATASET_ROOT/sp/lb).glob("*")))
+                     for sp in ["train","val"] for lb in ["real","fake"])
+    
+    if total_imgs < 100:
+        print("\n⚠️  No real data found — generating synthetic dataset for pipeline testing …")
+        for split in ["train","val"]:
+            for label in ["real","fake"]:
+                p = DATASET_ROOT/split/label
+                for i in range(80):
+                    arr = (np.random.rand(224,224,3)*255).astype(np.uint8)
+                    Image.fromarray(arr).save(p/f"synth_{i:04d}.jpg")
+
+    print("\n═══ Dataset Summary ═══")
+    for ds_name, counts in DS_STATS.items():
+        print(f"  {ds_name:20s} real={counts['real']:6d}  fake={counts['fake']:6d}")
     for split in ["train","val"]:
         for label in ["real","fake"]:
-            p = DATASET_ROOT/split/label
-            for i in range(80):
-                arr = (np.random.rand(224,224,3)*255).astype(np.uint8)
-                Image.fromarray(arr).save(p/f"synth_{i:04d}.jpg")
-
-print("\n═══ Dataset Summary ═══")
-for ds_name, counts in DS_STATS.items():
-    print(f"  {ds_name:20s} real={counts['real']:6d}  fake={counts['fake']:6d}")
-for split in ["train","val"]:
-    for label in ["real","fake"]:
-        n = len(list((DATASET_ROOT/split/label).glob("*")))
-        print(f"  {split}/{label}: {n} images")
+            n = len(list((DATASET_ROOT/split/label).glob("*")))
+            print(f"  {split}/{label}: {n} images")
 
 
-# ── CELL 4b : Dataset Distribution Plot ──────────────────────────────────────
-"""## 📊 Dataset Distribution"""
-import matplotlib; matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-if DS_STATS:
+def plot_dataset_dist():
+    """Visualize per-dataset distribution."""
+    if not DS_STATS: return
+    import matplotlib.pyplot as plt
     names = list(DS_STATS.keys())
     reals = [DS_STATS[n]["real"] for n in names]
     fakes = [DS_STATS[n]["fake"] for n in names]
@@ -312,11 +317,10 @@ if DS_STATS:
     ax.bar([i-0.2 for i in x], reals, 0.4, label="REAL", color="#3498db")
     ax.bar([i+0.2 for i in x], fakes, 0.4, label="FAKE", color="#e74c3c")
     ax.set_xticks(list(x)); ax.set_xticklabels(names, rotation=30, ha="right")
-    ax.set(ylabel="Image Count", title="Per-Dataset Real/Fake Distribution"); ax.legend()
+    ax.set(ylabel="Image Count", title="Per-Dataset Distribution"); ax.legend()
     plt.tight_layout()
-    fig.savefig(f"{LOG_DIR}/dataset_distribution.png", dpi=150, bbox_inches="tight")
+    fig.savefig(f"{LOG_DIR}/dataset_dist.png", dpi=150)
     plt.show()
-    print(f"✅ Distribution chart saved")
 
 
 # ── CELL 5 : Imports & Config ─────────────────────────────────────────────────
@@ -701,208 +705,147 @@ print("✅ Training loops ready")
   Epochs 1–{curriculum_epochs} : easy datasets only (celebdf, ff_plus_plus)
   Epochs {curriculum_epochs+1}+ : ALL datasets added
 """
-ckpt       = load_latest_ckpt()
-start_ep   = (ckpt["epoch"]+1) if ckpt else 0
-history    = load_history()
-best_auc   = max((h.get("val_auc_roc",0) for h in history), default=0.)
-patience   = 0
-best_state = None
-current_curriculum = "easy"
+def train_vision_model(config=None):
+    """Main training entry point."""
+    if config:
+        for k, v in config.items():
+            if hasattr(CFG, k):
+                setattr(CFG, k, v)
+    
+    # Identify datasets
+    download_all_datasets()
+    get_dataset_summary()
 
-print(f"\n{'='*60}")
-print(f"  Vision Training — ALL 6 DATASETS + Curriculum + MixUp")
-print(f"  Epochs {start_ep+1}→{CFG.num_epochs}  |  Best AUC: {best_auc:.4f}")
-print(f"{'='*60}")
+    # Init
+    ckpt       = load_latest_ckpt()
+    global start_ep, history, best_auc, patience, best_state, current_curriculum, train_loader, val_loader, scheduler
+    start_ep   = (ckpt["epoch"]+1) if ckpt else 0
+    history    = load_history()
+    best_auc   = max((h.get("val_auc_roc",0) for h in history), default=0.)
+    patience   = 0
+    best_state = None
+    current_curriculum = "easy"
 
-for epoch in range(start_ep, CFG.num_epochs):
-    t0 = time.time()
+    print(f"\n{'='*60}")
+    print(f"  Vision Training — ALL 6 DATASETS + Curriculum + MixUp")
+    print(f"  Epochs {start_ep+1}→{CFG.num_epochs}  |  Best AUC: {best_auc:.4f}")
+    print(f"{'='*60}")
 
-    # ── Curriculum phase switch ──────────────────────────────────────────────
-    if CFG.use_curriculum and epoch == CFG.curriculum_epochs and current_curriculum == "easy":
-        print(f"\n🎓 Epoch {epoch+1}: Switching to FULL dataset (all sources)")
-        train_loader, val_loader = make_loaders(source_filter=None)
-        # Rebuild optimizer for new data scale
-        total_steps_new = (len(train_loader)//CFG.grad_accum)*(CFG.num_epochs-epoch)
-        scheduler = get_cosine_schedule_with_warmup(
-            optimizer, CFG.warmup_steps//2, total_steps_new)
-        current_curriculum = "full"
-    elif epoch == 0 and CFG.use_curriculum:
-        print(f"\n🎓 Epoch {epoch+1}: Curriculum — easy datasets only")
-        train_loader, val_loader = make_loaders(source_filter=set(CFG.easy_datasets))
+    for epoch in range(start_ep, CFG.num_epochs):
+        t0 = time.time()
 
-    print(f"\n[Epoch {epoch+1}/{CFG.num_epochs}] [{current_curriculum.upper()}]")
+        # ── Curriculum phase switch ──────────────────────────────────────────────
+        if CFG.use_curriculum and epoch == CFG.curriculum_epochs and current_curriculum == "easy":
+            print(f"\n🎓 Epoch {epoch+1}: Switching to FULL dataset (all sources)")
+            train_loader, val_loader = make_loaders(source_filter=None)
+            total_steps_new = (len(train_loader)//CFG.grad_accum)*(CFG.num_epochs-epoch)
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer, CFG.warmup_steps//2, total_steps_new)
+            current_curriculum = "full"
+        elif epoch == 0 and CFG.use_curriculum:
+            print(f"\n🎓 Epoch {epoch+1}: Curriculum — easy datasets only")
+            train_loader, val_loader = make_loaders(source_filter=set(CFG.easy_datasets))
 
-    try:
-        tl, ta = train_one_epoch(train_loader, CFG.grad_accum)
-    except torch.cuda.OutOfMemoryError:
-        torch.cuda.empty_cache()
-        CFG.grad_accum = min(CFG.grad_accum*2, 16)
-        model.encoder.gradient_checkpointing_enable()
-        print(f"⚠️  OOM — grad_accum={CFG.grad_accum}, grad checkpointing ON")
-        tl, ta = train_one_epoch(train_loader, CFG.grad_accum)
+        print(f"\n[Epoch {epoch+1}/{CFG.num_epochs}] [{current_curriculum.upper()}]")
 
-    vm      = validate(val_loader)
-    is_best = vm["auc_roc"] > best_auc
+        try:
+            tl, ta = train_one_epoch(train_loader, CFG.grad_accum)
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            CFG.grad_accum = min(CFG.grad_accum*2, 16)
+            model.encoder.gradient_checkpointing_enable()
+            print(f"⚠️  OOM — grad_accum={CFG.grad_accum}, grad checkpointing ON")
+            tl, ta = train_one_epoch(train_loader, CFG.grad_accum)
 
-    row = {"epoch":epoch+1,"train_loss":tl,"train_acc":ta, "curriculum":current_curriculum,
-           **{f"val_{k}":v for k,v in vm.items()}, "elapsed":time.time()-t0}
-    history.append(row); save_history(history)
+        vm      = validate(val_loader)
+        is_best = vm["auc_roc"] > best_auc
 
-    print(f"  Train │ loss={tl:.4f}  acc={ta:.2f}%")
-    print(f"  Val   │ loss={vm['loss']:.4f}  acc={vm['accuracy']:.2f}%  "
-          f"AUC={vm['auc_roc']:.4f}  F1={vm['f1']:.4f}")
-    print(f"  ⏱ {row['elapsed']:.1f}s  {'🏆 BEST' if is_best else ''}")
+        row = {"epoch":epoch+1,"train_loss":tl,"train_acc":ta, "curriculum":current_curriculum,
+               **{f"val_{k}":v for k,v in vm.items()}, "elapsed":time.time()-t0}
+        history.append(row); save_history(history)
 
-    if (epoch+1)%CFG.save_every==0 or is_best:
-        save_ckpt(epoch+1, is_best)
+        print(f"  Train │ loss={tl:.4f}  acc={ta:.2f}%")
+        print(f"  Val   │ loss={vm['loss']:.4f}  acc={vm['accuracy']:.2f}%  "
+              f"AUC={vm['auc_roc']:.4f}  F1={vm['f1']:.4f}")
+        print(f"  ⏱ {row['elapsed']:.1f}s  {'🏆 BEST' if is_best else ''}")
 
-    if is_best:
-        best_auc = vm["auc_roc"]; best_state = copy.deepcopy(model.state_dict()); patience=0
-    else:
-        patience += 1
-        if patience >= CFG.early_stop:
-            print(f"\n⏹  Early stopping at epoch {epoch+1} (patience={CFG.early_stop})")
-            break
+        if (epoch+1)%CFG.save_every==0 or is_best:
+            save_ckpt(epoch+1, is_best)
 
-print("\n✅ Vision training complete!")
+        if is_best:
+            best_auc = vm["auc_roc"]; best_state = copy.deepcopy(model.state_dict()); patience=0
+            # Save Best Model format
+            model.load_state_dict(best_state); model.eval()
+            CLIPModel.from_pretrained(CFG.model_name).save_pretrained(CFG.best_model_dir)
+            torch.save(model.head.state_dict(), f"{CFG.best_model_dir}/head_weights.pt")
+            CLIPProcessor.from_pretrained(CFG.model_name).save_pretrained(CFG.best_model_dir)
+            cfg_out = {**asdict(CFG), "best_val_auc": best_auc, "labels":["REAL","FAKE"]}
+            json.dump(cfg_out, open(f"{CFG.best_model_dir}/train_config.json","w"), indent=2)
+        else:
+            patience += 1
+            if patience >= CFG.early_stop:
+                print(f"\n⏹  Early stopping at epoch {epoch+1} (patience={CFG.early_stop})")
+                break
 
+    print("\n✅ Vision training complete!")
 
-# ── CELL 16 : Save Best Model ─────────────────────────────────────────────────
-"""## 💾 Save Best Model (HuggingFace Format)"""
-model.load_state_dict(best_state); model.eval()
-CLIPModel.from_pretrained(CFG.model_name).save_pretrained(CFG.best_model_dir)
-torch.save(model.head.state_dict(), f"{CFG.best_model_dir}/head_weights.pt")
-CLIPProcessor.from_pretrained(CFG.model_name).save_pretrained(CFG.best_model_dir)
-cfg_out = {**asdict(CFG), "best_val_auc": best_auc,
-           "labels":["REAL","FAKE"],
-           "training_datasets":list(DS_STATS.keys())}
-json.dump(cfg_out, open(f"{CFG.best_model_dir}/train_config.json","w"), indent=2)
-print(f"✅ Best vision model → {CFG.best_model_dir}  (AUC={best_auc:.4f})")
+def evaluate_vision_model():
+    """Run full evaluation and plot results."""
+    all_l, all_p, cam_imgs = [], [], []
+    for imgs, labels in tqdm(val_loader, desc="Final eval"):
+        with torch.no_grad(), autocast(enabled=CFG.fp16):
+            logits,_ = model(imgs.to(DEVICE))
+        all_p.append(F.softmax(logits,-1).cpu().numpy())
+        all_l.append(labels.numpy())
+        if len(cam_imgs)<25: cam_imgs.extend(imgs[:25-len(cam_imgs)])
 
-
-# ── CELL 17 : Full Evaluation ─────────────────────────────────────────────────
-"""## 📊 Evaluation — Confusion Matrix & Report"""
-all_l, all_p, cam_imgs = [], [], []
-for imgs, labels in tqdm(val_loader, desc="Final eval"):
-    with torch.no_grad(), autocast(enabled=CFG.fp16):
-        logits,_ = model(imgs.to(DEVICE))
-    all_p.append(F.softmax(logits,-1).cpu().numpy())
-    all_l.append(labels.numpy())
-    if len(cam_imgs)<25: cam_imgs.extend(imgs[:25-len(cam_imgs)])
-
-all_l = np.concatenate(all_l); all_p = np.concatenate(all_p,0)
-fm = compute_metrics(all_l, all_p.argmax(1), all_p)
-print("\n════ FINAL EVALUATION — ALL 6 DATASETS ════")
-print(f"  Accuracy : {fm['accuracy']:.2f}%")
-print(f"  AUC-ROC  : {fm['auc_roc']:.4f}")
-print(f"  F1       : {fm['f1']:.4f}")
-print(f"  Precision: {fm['precision']:.4f}")
-print(f"  Recall   : {fm['recall']:.4f}")
-print(); print(classification_report(all_l,all_p.argmax(1),target_names=["REAL","FAKE"]))
-
-import seaborn as sns
-cm = confusion_matrix(all_l,all_p.argmax(1))
-fig,ax = plt.subplots(figsize=(5,4))
-sns.heatmap(cm,annot=True,fmt="d",cmap="Blues",xticklabels=["REAL","FAKE"],yticklabels=["REAL","FAKE"],ax=ax)
-ax.set(xlabel="Predicted",ylabel="True",title="Confusion Matrix — All Datasets")
-fig.savefig(f"{CFG.log_dir}/confusion_matrix.png",dpi=150,bbox_inches="tight"); plt.show()
-
-
-# ── CELL 18 : GradCAM 5×5 Grid ───────────────────────────────────────────────
-"""## 🔥 GradCAM Heatmap Grid"""
-UNNORM = T.Compose([T.Normalize([0]*3,[1/s for s in CLIP_STD]),
-                    T.Normalize([-m for m in CLIP_MEAN],[1]*3)])
-n_show = min(25,len(cam_imgs))
-fig,axes = plt.subplots(5,5,figsize=(20,20))
-fig.suptitle("GradCAM — All-Dataset CLIP Detector [red=FAKE regions]",fontsize=14)
-for i in range(n_show):
-    ax=axes[i//5][i%5]; t=cam_imgs[i]
-    hm = gradcam.generate(t,cls=1)
-    img_np=(UNNORM(t).permute(1,2,0).clamp(0,1).numpy()*255).astype(np.uint8)
-    heat=cv2.cvtColor(cv2.applyColorMap((hm*255).astype(np.uint8),cv2.COLORMAP_JET),cv2.COLOR_BGR2RGB)
-    ax.imshow((img_np*0.55+heat*0.45).clip(0,255).astype(np.uint8)); ax.axis("off")
-    with torch.no_grad(),autocast(enabled=CFG.fp16):
-        p=F.softmax(model(t.unsqueeze(0).to(DEVICE))[0],-1)[0,1].item()
-    ax.set_title(f"FAKE:{p*100:.1f}%",fontsize=8)
-for i in range(n_show,25): axes[i//5][i%5].axis("off")
-plt.tight_layout()
-fig.savefig(f"{CFG.log_dir}/gradcam_grid.png",dpi=120,bbox_inches="tight"); plt.show()
-print(f"✅ GradCAM grid saved")
-
-
-# ── CELL 19 : Training Curves ─────────────────────────────────────────────────
-"""## 📈 Training Curves"""
-hist=load_history(); ep=[h["epoch"] for h in hist]
-fig,axes=plt.subplots(1,3,figsize=(18,5))
-axes[0].plot(ep,[h["train_loss"] for h in hist],label="train")
-axes[0].plot(ep,[h["val_loss"]   for h in hist],label="val")
-# Mark curriculum switch
-if CFG.use_curriculum:
-    axes[0].axvline(CFG.curriculum_epochs,color="orange",linestyle="--",label="full data start")
-axes[0].set(title="Loss",xlabel="Epoch"); axes[0].legend()
-axes[1].plot(ep,[h["train_acc"]   for h in hist],label="train")
-axes[1].plot(ep,[h["val_accuracy"] for h in hist],label="val")
-if CFG.use_curriculum: axes[1].axvline(CFG.curriculum_epochs,color="orange",linestyle="--")
-axes[1].set(title="Accuracy %",xlabel="Epoch"); axes[1].legend()
-axes[2].plot(ep,[h["val_auc_roc"] for h in hist],color="purple")
-if CFG.use_curriculum: axes[2].axvline(CFG.curriculum_epochs,color="orange",linestyle="--",label="full data")
-axes[2].set(title="Val AUC-ROC",xlabel="Epoch"); axes[2].legend()
-plt.suptitle("CLIP Vision — All Datasets + Curriculum Training"); plt.tight_layout()
-fig.savefig(f"{CFG.log_dir}/training_curves.png",dpi=150,bbox_inches="tight"); plt.show()
-print("✅ Training curves saved")
-
-
-# ── CELL 20 : HuggingFace Upload ──────────────────────────────────────────────
-"""## 🤗 Upload to HuggingFace Hub — replace placeholders"""
-HF_TOKEN = "YOUR_HF_TOKEN"
-HF_USER  = "your-hf-username"
-REPO_ID  = f"{HF_USER}/clip-vit-large-deepfake-detector-v2"
-hf_login(token=HF_TOKEN)
-api = HfApi()
-api.create_repo(repo_id=REPO_ID, exist_ok=True)
-api.upload_folder(folder_path=CFG.best_model_dir, repo_id=REPO_ID,
-                  commit_message=f"All-dataset CLIP deepfake AUC={best_auc:.4f}")
-print(f"✅ Uploaded → https://huggingface.co/{REPO_ID}")
-
-
-# ── CELL 21 : Inference Function ──────────────────────────────────────────────
-"""## 🔮 Inference"""
-def load_best_vision_model(mdir=CFG.best_model_dir):
-    m = CLIPDeepfake(CFG).to(DEVICE)
-    m.head.load_state_dict(torch.load(f"{mdir}/head_weights.pt",map_location=DEVICE))
-    m.eval(); return m
+    all_l = np.concatenate(all_l); all_p = np.concatenate(all_p,0)
+    fm = compute_metrics(all_l, all_p.argmax(1), all_p)
+    print("\n════ FINAL EVALUATION ════")
+    print(f"  Accuracy : {fm['accuracy']:.2f}%")
+    print(f"  AUC-ROC  : {fm['auc_roc']:.4f}")
+    
+    # Save curves
+    hist=load_history(); ep=[h["epoch"] for h in hist]
+    fig,axes=plt.subplots(1,2,figsize=(12,5))
+    axes[0].plot(ep,[h["train_loss"] for h in hist],label="train")
+    axes[0].plot(ep,[h["val_loss"]   for h in hist],label="val")
+    axes[0].set(title="Loss"); axes[0].legend()
+    axes[1].plot(ep,[h["val_auc_roc"] for h in hist],color="purple")
+    axes[1].set(title="Val AUC-ROC")
+    plt.show()
 
 def predict_vision(media_path:str, mdir:str=CFG.best_model_dir, max_frames:int=16)->dict:
-    mdl=load_best_vision_model(mdir); cam=ViTGradCAM(mdl); ext=Path(media_path).suffix.lower()
+    """Run inference on image/video."""
+    # Ensure model is on device
+    m = CLIPDeepfake(CFG).to(DEVICE)
+    try:
+        m.head.load_state_dict(torch.load(f"{mdir}/head_weights.pt",map_location=DEVICE))
+    except:
+        print("️⚠️ Best weights not found, using current weights.")
+    m.eval(); cam=ViTGradCAM(m); ext=Path(media_path).suffix.lower()
+    
     def _inf(img):
         t=apply_aug(img,val_aug).unsqueeze(0).to(DEVICE)
         with torch.no_grad(),autocast(enabled=True):
-            lg,_=mdl(t)
+            lg,_=m(t)
         p=F.softmax(lg,-1)[0,1].item(); hm=cam.generate(apply_aug(img,val_aug),cls=1)
         return p,hm
+
     if ext in {".mp4",".avi",".mov",".mkv"}:
         cap=cv2.VideoCapture(media_path); tot=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         idxs=np.linspace(0,tot-1,min(max_frames,tot),dtype=int); scores,hms=[],[]
-        for fi in idxs:
+        for fi in tqdm(idxs, desc="Analyzing video"):
             cap.set(cv2.CAP_PROP_POS_FRAMES,int(fi)); ret,fr=cap.read()
             if not ret: continue
             p,hm=_inf(Image.fromarray(cv2.cvtColor(fr,cv2.COLOR_BGR2RGB)))
             scores.append(p); hms.append(hm)
         cap.release(); conf=float(np.mean(scores)) if scores else 0.5
-        avg_hm=np.mean(hms,0) if hms else np.zeros((224,224))
     else:
-        conf,avg_hm=_inf(Image.open(media_path).convert("RGB")); scores=[conf]
-    hm_out=f"{CFG.log_dir}/heatmap_{Path(media_path).stem}.png"
-    cv2.imwrite(hm_out,cv2.applyColorMap((avg_hm*255).astype(np.uint8),cv2.COLORMAP_JET))
-    g=avg_hm.reshape(3,-1,3,-1).mean((1,3))
-    REG=["top-left","top-center","top-right","mid-left","mid-center","mid-right",
-         "bot-left","bot-center","bot-right"]
-    top=[REG[i] for i in g.flatten().argsort()[::-1][:3]]
-    return {"model":"clip-vit-large-finetuned-all-datasets","confidence":round(conf*100,2),
-            "heatmap_path":hm_out,"top_regions_flagged":top,
-            "frame_scores":[round(s*100,2) for s in scores],
-            "training_datasets":list(DS_STATS.keys())}
+        conf,avg_hm=_inf(Image.open(media_path).convert("RGB"))
+        
+    return {"confidence":round(conf*100,2), "verdict": "FAKE" if conf > 0.5 else "REAL"}
 
-_s=str(next((DATASET_ROOT/"val"/"fake").glob("*")))
-print(json.dumps(predict_vision(_s),indent=2))
-print("\n✅ Vision notebook complete!")
+if __name__ == "__main__":
+    # If run directly as a script (not imported), start default training
+    train_vision_model()
